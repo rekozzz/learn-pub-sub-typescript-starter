@@ -1,13 +1,16 @@
 import amqp from "amqplib";
 import { publishJSON } from "../internal/pubsub/publish.js";
-import { ExchangePerilDirect, PauseKey } from "../internal/routing/routing.js";
+import { ExchangePerilDirect, ExchangePerilTopic, GameLogSlug, PauseKey } from "../internal/routing/routing.js";
 import type { PlayingState } from "../internal/gamelogic/gamestate.js";
 import { getInput, printServerHelp } from "../internal/gamelogic/gamelogic.js";
+import { declareAndBind, SimpleQueueType } from "../internal/pubsub/consume.js";
 
 async function main() {
   const rabbitConnString = "amqp://guest:guest@localhost:5672/";
 
   const conn = await amqp.connect(rabbitConnString);
+
+  await declareAndBind(conn, ExchangePerilTopic, "game_logs", `${GameLogSlug}.*`, SimpleQueueType.Durable);
 
   const ch = await conn.createConfirmChannel();
 
@@ -29,7 +32,7 @@ async function main() {
         isPaused: true,
       };
 
-      await publishJSON(ch, ExchangePerilDirect, PauseKey, state);
+      await publishJSON(ch, ExchangePerilTopic, GameLogSlug , state);
     } else if (words[0] === "resume") {
       console.log("Sending resume message");
 
@@ -37,7 +40,7 @@ async function main() {
         isPaused: false,
       };
 
-      await publishJSON(ch, ExchangePerilDirect, PauseKey, state);
+      await publishJSON(ch, ExchangePerilTopic, GameLogSlug , state);
     } else if (words[0] === "quit") {
       console.log("Exiting...");
       break;
