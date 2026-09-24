@@ -1,19 +1,32 @@
 import type { ConfirmChannel } from "amqplib";
+
 import type { ArmyMove, RecognitionOfWar } from "../internal/gamelogic/gamedata.js";
+import type { GameLog } from "../internal/gamelogic/logs.js";
 import type { GameState, PlayingState } from "../internal/gamelogic/gamestate.js";
+
 import { handleMove, MoveOutcome } from "../internal/gamelogic/move.js";
 import { handlePause } from "../internal/gamelogic/pause.js";
-import { AckType } from "../internal/pubsub/consume.js";
-import { ExchangePerilTopic, WarRecognitionsPrefix } from "../internal/routing/routing.js";
-import { publishJSON } from "../internal/pubsub/publish.js";
 import { handleWar, WarOutcome } from "../internal/gamelogic/war.js";
 
-export function handlerPause(gs: GameState): (ps: PlayingState) => AckType {
+import { AckType } from "../internal/pubsub/consume.js";
+import { publishJSON, publishMsgPack } from "../internal/pubsub/publish.js";
+
+import {
+  ExchangePerilTopic,
+  GameLogSlug,
+  WarRecognitionsPrefix,
+} from "../internal/routing/routing.js";
+
+
+export function handlerPause(
+  gs: GameState,
+): (ps: PlayingState) => AckType {
   return (ps: PlayingState) => {
     handlePause(gs, ps);
+
     process.stdout.write("> ");
 
-     return AckType.Ack;
+    return AckType.Ack;
   };
 }
 
@@ -40,10 +53,13 @@ export function handlerMove(
         );
 
         process.stdout.write("> ");
+
         return AckType.Ack;
       } catch (err) {
         console.error("Failed to publish war:", err);
+
         process.stdout.write("> ");
+
         return AckType.NackRequeue;
       }
     }
@@ -59,11 +75,32 @@ export function handlerMove(
 }
 
 
+function publishGameLog(
+  ch: ConfirmChannel,
+  username: string,
+  message: string,
+): Promise<void> {
+  const gameLog: GameLog = {
+    username,
+    message,
+    currentTime: new Date(),
+  };
+
+  return publishMsgPack(
+    ch,
+    ExchangePerilTopic,
+    `${GameLogSlug}.${username}`,
+    gameLog,
+  );
+}
+
 
 export function handlerWar(
   gs: GameState,
-): (rw: RecognitionOfWar) => AckType {
-  return (rw: RecognitionOfWar) => {
+  ch: ConfirmChannel,
+): (rw: RecognitionOfWar) => Promise<AckType> {
+  return async (rw: RecognitionOfWar) => {
+    console.log("PUBLISHING GAME LOG");
     const resolution = handleWar(gs, rw);
 
     if (resolution.result === WarOutcome.NotInvolved) {
@@ -76,17 +113,78 @@ export function handlerWar(
       return AckType.NackDiscard;
     }
 
-    if (
-      resolution.result === WarOutcome.OpponentWon ||
-      resolution.result === WarOutcome.YouWon ||
-      resolution.result === WarOutcome.Draw
-    ) {
-      process.stdout.write("> ");
-      return AckType.Ack;
+    if (resolution.result === WarOutcome.OpponentWon) {
+      const message = `${resolution.winner} won a war against ${resolution.loser}`;
+
+      try {
+        await publishGameLog(
+          ch,
+          rw.attacker.username,
+          message,
+        );
+
+        process.stdout.write("> ");
+
+        return AckType.Ack;
+      } catch (err) {
+        console.error("Failed to publish game log:", err);
+         console.error(err);
+
+        process.stdout.write("> ");
+
+        return AckType.NackRequeue;
+      }
+    }
+
+    if (resolution.result === WarOutcome.YouWon) {
+      const message = `${resolution.winner} won a war against ${resolution.loser}`;
+
+      try {
+        await publishGameLog(
+          ch,
+          rw.attacker.username,
+          message,
+        );
+
+        process.stdout.write("> ");
+
+        return AckType.Ack;
+      } catch (err) {
+        console.error("Failed to publish game log:", err);
+
+        process.stdout.write("> ");
+
+        return AckType.NackRequeue;
+      }
+    }
+
+    if (resolution.result === WarOutcome.Draw) {
+      const message =
+        `A war between ${resolution.attacker} and ${resolution.defender} resulted in a draw`;
+
+      try {
+        await publishGameLog(
+          ch,
+          rw.attacker.username,
+          message,
+        );
+
+        process.stdout.write("> ");
+
+        return AckType.Ack;
+      } catch (err) {
+        console.error("Failed to publish game log:", err);
+
+        process.stdout.write("> ");
+
+        return AckType.NackRequeue;
+      }
     }
 
     console.error("Unknown war outcome");
+
     process.stdout.write("> ");
+
     return AckType.NackDiscard;
   };
 }
