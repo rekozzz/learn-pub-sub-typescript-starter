@@ -8,20 +8,30 @@ import {
 } from "../internal/routing/routing.js";
 import type { PlayingState } from "../internal/gamelogic/gamestate.js";
 import { getInput, printServerHelp } from "../internal/gamelogic/gamelogic.js";
-import { declareAndBind, SimpleQueueType } from "../internal/pubsub/consume.js";
+import { AckType, declareAndBind, SimpleQueueType, subscribeMsgPack } from "../internal/pubsub/consume.js";
+import { writeLog, type GameLog } from "../internal/gamelogic/logs.js";
+
+async function handleGameLog(gameLog: GameLog): Promise<AckType> {
+  await writeLog(gameLog);
+
+  process.stdout.write("> ");
+
+  return AckType.Ack;
+}
 
 async function main() {
   const rabbitConnString = "amqp://guest:guest@localhost:5672/";
 
   const conn = await amqp.connect(rabbitConnString);
 
-  await declareAndBind(
-    conn,
-    ExchangePerilTopic,
-    "game_logs",
-    `${GameLogSlug}.*`,
-    SimpleQueueType.Durable,
-  );
+ await subscribeMsgPack(
+  conn,
+  ExchangePerilTopic,
+  "game_logs",
+  `${GameLogSlug}.*`,
+  SimpleQueueType.Durable,
+  handleGameLog,
+);
 
   const ch = await conn.createConfirmChannel();
 
