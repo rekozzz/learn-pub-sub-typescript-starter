@@ -25,23 +25,30 @@ export function handlerMove(
   return async (move: ArmyMove) => {
     const outcome = handleMove(gs, move);
 
-    process.stdout.write("> ");
-
     if (outcome === MoveOutcome.MakeWar) {
       const rw: RecognitionOfWar = {
         attacker: move.player,
         defender: gs.getPlayerSnap(),
       };
 
-      await publishJSON(
-        ch,
-        ExchangePerilTopic,
-        `${WarRecognitionsPrefix}.${gs.getPlayerSnap().username}`,
-        rw,
-      );
+      try {
+        await publishJSON(
+          ch,
+          ExchangePerilTopic,
+          `${WarRecognitionsPrefix}.${gs.getPlayerSnap().username}`,
+          rw,
+        );
 
-      return AckType.NackRequeue;
+        process.stdout.write("> ");
+        return AckType.Ack;
+      } catch (err) {
+        console.error("Failed to publish war:", err);
+        process.stdout.write("> ");
+        return AckType.NackRequeue;
+      }
     }
+
+    process.stdout.write("> ");
 
     if (outcome === MoveOutcome.Safe) {
       return AckType.Ack;
