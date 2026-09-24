@@ -44,30 +44,29 @@ export async function subscribeJSON<T>(
   queueName: string,
   key: string,
   queueType: SimpleQueueType,
-  handler: (data: T) => AckType,
+ handler: (data: T) => Promise<AckType> | AckType,
 ): Promise<void>{
    const [ch, queue] = await declareAndBind(conn, exchange, queueName, key, queueType);
 
-  await ch.consume(queue.queue, (message: amqp.ConsumeMessage | null) => {
-    if(message === null) {
-      return;
-    }
+  await ch.consume(queue.queue, async (message: amqp.ConsumeMessage | null) => {
+  if (message === null) {
+    return;
+  }
 
-    const data = JSON.parse(message.content.toString());
+  const data = JSON.parse(message.content.toString());
 
-   const ackType = handler(data);
+  const ackType = await handler(data);
 
-   if (ackType === AckType.Ack) {
-  console.log("Ack");
-  ch.ack(message);
-} else if (ackType === AckType.NackRequeue) {
-  console.log("NackRequeue");
-  ch.nack(message, false, true);
-} else if (ackType === AckType.NackDiscard) {
-  console.log("NackDiscard");
-  ch.nack(message, false, false);
-}
-
+  if (ackType === AckType.Ack) {
+    console.log("Ack");
+    ch.ack(message);
+  } else if (ackType === AckType.NackRequeue) {
+    console.log("NackRequeue");
+    ch.nack(message, false, true);
+  } else if (ackType === AckType.NackDiscard) {
+    console.log("NackDiscard");
+    ch.nack(message, false, false);
+  }
 });
 
 }
