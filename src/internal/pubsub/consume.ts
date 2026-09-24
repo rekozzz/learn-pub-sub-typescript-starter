@@ -23,11 +23,14 @@ export async function declareAndBind(
 
    const isTransiet = queueType === SimpleQueueType.Transient;
 
-   const queue = await ch.assertQueue(queueName, {
-     durable: !isTransiet,
-     exclusive: isTransiet,
-    autoDelete: isTransiet,
-   })
+  const queue = await ch.assertQueue(queueName, {
+  durable: !isTransiet,
+  exclusive: isTransiet,
+  autoDelete: isTransiet,
+  arguments: {
+    "x-dead-letter-exchange": "peril_dlx",
+  },
+});
 
    ch.bindQueue(queue.queue, exchange, key);    
 
