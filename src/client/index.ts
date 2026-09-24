@@ -1,16 +1,18 @@
 import amqp from "amqplib";
 import { clientWelcome, commandStatus, getInput, printClientHelp, printQuit } from "../internal/gamelogic/gamelogic.js";
 import { declareAndBind, SimpleQueueType, subscribeJSON } from "../internal/pubsub/consume.js";
-import { ExchangePerilDirect, PauseKey } from "../internal/routing/routing.js";
+import { ArmyMovesPrefix, ExchangePerilDirect, ExchangePerilTopic, PauseKey } from "../internal/routing/routing.js";
 import { GameState } from "../internal/gamelogic/gamestate.js";
 import { commandSpawn } from "../internal/gamelogic/spawn.js";
 import { commandMove } from "../internal/gamelogic/move.js";
-import { handlerPause } from "./handlers.js";
+import { handlerMove, handlerPause } from "./handlers.js";
+import { publishJSON } from "../internal/pubsub/publish.js";
 
 async function main() {
   const rabbitConnString = "amqp://guest:guest@localhost:5672/";
   
     const conn = await amqp.connect(rabbitConnString);
+     const ch = await conn.createConfirmChannel();
   
 
     const username = await clientWelcome();
@@ -25,6 +27,15 @@ await subscribeJSON(
   PauseKey,
   SimpleQueueType.Transient,
   handlerPause(gameState)
+);
+
+await subscribeJSON(
+  conn,
+  ExchangePerilTopic,
+  `army_moves.${username}`,
+  `army_moves.*`,
+  SimpleQueueType.Transient,
+  handlerMove(gameState)
 );
 
     while (true) {
@@ -46,10 +57,18 @@ await subscribeJSON(
       }
     }
   } else if (command === "move") {
-    try {
-      commandMove(gameState, words);
-      console.log("Unit moved successfully");
-    } catch (err) {
+  try {
+    const move = commandMove(gameState, words);
+
+    await publishJSON(
+      ch,
+      ExchangePerilTopic,
+      `${ArmyMovesPrefix}.${username}`,
+      move,
+    );
+
+    console.log("Move published successfully");
+  } catch (err) {
       if (err instanceof Error) {
         console.log(err.message);
       }
