@@ -54,6 +54,8 @@ export async function subscribeJSON<T>(
     queueType,
   );
 
+  await ch.prefetch(1);
+
   await ch.consume(queue.queue, async (message: amqp.ConsumeMessage | null) => {
     if (message === null) {
       return;
