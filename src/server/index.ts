@@ -37,6 +37,13 @@ async function main() {
 
   console.log("Connected to RabbitMQ");
 
+  
+
+  if (!process.stdin.isTTY) {
+  console.log("Non-interactive mode: skipping command input.");
+  return;
+}
+
   printServerHelp();
 
   while (true) {

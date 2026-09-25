@@ -54,7 +54,7 @@ export async function subscribeJSON<T>(
     queueType,
   );
 
-  await ch.prefetch(1);
+  await ch.prefetch(10);
 
   await ch.consume(queue.queue, async (message: amqp.ConsumeMessage | null) => {
     if (message === null) {
@@ -93,6 +93,8 @@ export async function subscribeMsgPack<T>(
     key,
     queueType,
   );
+
+  await ch.prefetch(10);
 
   await ch.consume(queue.queue, async (message: amqp.ConsumeMessage | null) => {
     if (message === null) {
